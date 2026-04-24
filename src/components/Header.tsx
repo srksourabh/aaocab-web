@@ -1,0 +1,64 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import { Phone } from "lucide-react";
+
+export default function Header() {
+  const [scrolled, setScrolled] = useState(false);
+  const [lang, setLang] = useState<"EN" | "HI">("EN");
+
+  useEffect(() => {
+    const handleScroll = () => {
+      setScrolled(window.scrollY > 8);
+    };
+
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
+
+  function toggleLang() {
+    setLang((prev) => (prev === "EN" ? "HI" : "EN"));
+  }
+
+  return (
+    <header
+      className={`sticky top-0 z-50 bg-background transition-shadow duration-200 ${
+        scrolled ? "shadow-md" : "shadow-none"
+      }`}
+    >
+      <div className="max-w-7xl mx-auto px-4 flex items-center justify-between h-16 md:h-[72px]">
+        {/* Logo */}
+        <Link
+          href="/"
+          className="font-heading font-bold text-2xl text-primary tracking-tight cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
+          aria-label="AaoCab Home"
+        >
+          AaoCab
+        </Link>
+
+        {/* Right side actions */}
+        <div className="flex items-center gap-3">
+          {/* Language toggle */}
+          <button
+            onClick={toggleLang}
+            aria-label={`Switch to ${lang === "EN" ? "Hindi" : "English"}`}
+            className="text-sm font-semibold text-muted-foreground border border-border rounded-full px-3 py-1.5 min-h-[44px] min-w-[44px] flex items-center justify-center hover:bg-muted hover:text-foreground transition-all duration-200 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            {lang}
+          </button>
+
+          {/* Phone CTA */}
+          <a
+            href="tel:7890302302"
+            aria-label="Call AaoCab at 7890302302"
+            className="flex items-center gap-1.5 text-sm font-semibold text-primary min-h-[44px] px-3 rounded-full hover:bg-primary/10 transition-all duration-200 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <Phone size={18} aria-hidden="true" />
+            <span className="hidden sm:inline">7890 302 302</span>
+          </a>
+        </div>
+      </div>
+    </header>
+  );
+}
