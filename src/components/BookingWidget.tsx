@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef } from "react";
+import { useRouter } from "next/navigation";
 import { MapPin, ArrowRight, CalendarDays, Clock, ChevronDown } from "lucide-react";
 
 // --- Types ---
@@ -206,19 +207,17 @@ function FourHourWarning({ earliest }: { earliest: string }) {
 }
 
 // --- Tab: Outstation ---
-function OutstationTab() {
-  const [state, setState] = useState<OutstationState>({
-    from: "",
-    to: "",
-    date: "",
-    time: "",
-    roundTrip: false,
-  });
-
+function OutstationTab({
+  state,
+  onChange,
+}: {
+  state: OutstationState;
+  onChange: (s: OutstationState) => void;
+}) {
   const earliest = getEarliestPickup(state.date, state.time);
 
   function update<K extends keyof OutstationState>(key: K, value: OutstationState[K]) {
-    setState((prev) => ({ ...prev, [key]: value }));
+    onChange({ ...state, [key]: value });
   }
 
   return (
@@ -275,18 +274,17 @@ function OutstationTab() {
 }
 
 // --- Tab: Local Rental ---
-function LocalTab() {
-  const [state, setState] = useState<LocalState>({
-    city: "",
-    date: "",
-    time: "",
-    pkg: "",
-  });
-
+function LocalTab({
+  state,
+  onChange,
+}: {
+  state: LocalState;
+  onChange: (s: LocalState) => void;
+}) {
   const earliest = getEarliestPickup(state.date, state.time);
 
   function update<K extends keyof LocalState>(key: K, value: LocalState[K]) {
-    setState((prev) => ({ ...prev, [key]: value }));
+    onChange({ ...state, [key]: value });
   }
 
   return (
@@ -326,18 +324,17 @@ function LocalTab() {
 }
 
 // --- Tab: Airport Transfer ---
-function AirportTab() {
-  const [state, setState] = useState<AirportState>({
-    airport: "",
-    transferType: "pickup",
-    date: "",
-    time: "",
-  });
-
+function AirportTab({
+  state,
+  onChange,
+}: {
+  state: AirportState;
+  onChange: (s: AirportState) => void;
+}) {
   const earliest = getEarliestPickup(state.date, state.time);
 
   function update<K extends keyof AirportState>(key: K, value: AirportState[K]) {
-    setState((prev) => ({ ...prev, [key]: value }));
+    onChange({ ...state, [key]: value });
   }
 
   return (
@@ -401,8 +398,30 @@ function AirportTab() {
 
 // --- Main BookingWidget ---
 export default function BookingWidget() {
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState<TripType>("outstation");
   const tabListRef = useRef<HTMLDivElement>(null);
+
+  // State lifted up so CTA button can read it
+  const [outstationState, setOutstationState] = useState<OutstationState>({
+    from: "",
+    to: "",
+    date: "",
+    time: "",
+    roundTrip: false,
+  });
+  const [localState, setLocalState] = useState<LocalState>({
+    city: "",
+    date: "",
+    time: "",
+    pkg: "",
+  });
+  const [airportState, setAirportState] = useState<AirportState>({
+    airport: "",
+    transferType: "pickup",
+    date: "",
+    time: "",
+  });
 
   // Keyboard navigation for tabs
   function handleTabKeyDown(e: React.KeyboardEvent, currentIndex: number) {
@@ -417,6 +436,45 @@ export default function BookingWidget() {
       const prev = (currentIndex - 1 + TAB_LABELS.length) % TAB_LABELS.length;
       setActiveTab(TAB_LABELS[prev].key);
       (tabListRef.current?.querySelectorAll("[role=tab]")[prev] as HTMLElement)?.focus();
+    }
+  }
+
+  function handleGetPrices() {
+    if (activeTab === "outstation") {
+      const qs = new URLSearchParams({
+        from: outstationState.from,
+        to: outstationState.to,
+        date: outstationState.date,
+        time: outstationState.time,
+        type: "outstation",
+        roundTrip: String(outstationState.roundTrip),
+        distance: "200", // default estimate; real routes will override
+      });
+      router.push(`/book?${qs.toString()}`);
+    } else if (activeTab === "local") {
+      const qs = new URLSearchParams({
+        from: localState.city,
+        to: localState.city,
+        date: localState.date,
+        time: localState.time,
+        type: "local",
+        roundTrip: "false",
+        pkg: localState.pkg,
+        distance: "80",
+      });
+      router.push(`/book?${qs.toString()}`);
+    } else if (activeTab === "airport") {
+      const qs = new URLSearchParams({
+        from: airportState.airport,
+        to: airportState.airport,
+        date: airportState.date,
+        time: airportState.time,
+        type: "airport",
+        roundTrip: "false",
+        transferType: airportState.transferType,
+        distance: "50",
+      });
+      router.push(`/book?${qs.toString()}`);
     }
   }
 
@@ -456,14 +514,21 @@ export default function BookingWidget() {
         id={`tabpanel-${activeTab}`}
         aria-labelledby={`tab-${activeTab}`}
       >
-        {activeTab === "outstation" && <OutstationTab />}
-        {activeTab === "local" && <LocalTab />}
-        {activeTab === "airport" && <AirportTab />}
+        {activeTab === "outstation" && (
+          <OutstationTab state={outstationState} onChange={setOutstationState} />
+        )}
+        {activeTab === "local" && (
+          <LocalTab state={localState} onChange={setLocalState} />
+        )}
+        {activeTab === "airport" && (
+          <AirportTab state={airportState} onChange={setAirportState} />
+        )}
       </div>
 
       {/* CTA */}
       <button
         type="button"
+        onClick={handleGetPrices}
         className="mt-6 w-full flex items-center justify-center gap-2 bg-primary text-primary-foreground font-heading font-semibold text-base rounded-[40px] h-14 md:h-12 hover:bg-primary/90 active:scale-[0.98] transition-all duration-200 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
         aria-label="Get cab prices"
       >
