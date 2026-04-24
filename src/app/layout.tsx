@@ -4,6 +4,7 @@ import "./globals.css";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import BottomNav from "@/components/BottomNav";
+import { generateLocalBusinessSchema } from "@/lib/seo";
 
 const mulish = Mulish({
   variable: "--font-sans",
@@ -30,11 +31,19 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const localBusinessSchema = generateLocalBusinessSchema();
+
   return (
     <html
       lang="en"
       className={`${mulish.variable} ${poppins.variable} h-full antialiased`}
     >
+      <head>
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(localBusinessSchema) }}
+        />
+      </head>
       <body className="min-h-full flex flex-col font-sans">
         <Header />
         <main className="flex-1 pb-16 md:pb-0">{children}</main>
