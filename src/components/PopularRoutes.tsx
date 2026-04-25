@@ -1,6 +1,16 @@
 import { ArrowRight } from "lucide-react";
+import { supabase } from "@/lib/supabase";
+import { estimateFareForVehicle } from "@/lib/seo";
 
-const ROUTES = [
+interface RouteRow {
+  id: string;
+  distance_km: number;
+  from_city: { name: string } | null;
+  to_city: { name: string } | null;
+}
+
+// Fallback data shown when Supabase is unavailable
+const FALLBACK_ROUTES = [
   { from: "Delhi", to: "Agra", price: "₹2,800", distance: "233 km" },
   { from: "Delhi", to: "Jaipur", price: "₹3,200", distance: "282 km" },
   { from: "Mumbai", to: "Pune", price: "₹2,200", distance: "149 km" },
@@ -15,7 +25,35 @@ function toSlug(city: string) {
   return city.toLowerCase().replace(/\s+/g, "-");
 }
 
-export default function PopularRoutes() {
+async function fetchRoutes(): Promise<
+  Array<{ from: string; to: string; price: string; distance: string }>
+> {
+  const { data, error } = await supabase
+    .from("routes")
+    .select("id, distance_km, from_city:from_city_id(name), to_city:to_city_id(name)")
+    .order("id", { ascending: true })
+    .limit(8);
+
+  if (error || !data || data.length === 0) {
+    return FALLBACK_ROUTES.map((r) => ({ ...r }));
+  }
+
+  return (data as unknown as RouteRow[])
+    .filter((r) => r.from_city && r.to_city)
+    .map((r) => {
+      const sedanFare = estimateFareForVehicle(r.distance_km, "sedan");
+      return {
+        from: r.from_city!.name,
+        to: r.to_city!.name,
+        price: `₹${sedanFare.toLocaleString("en-IN")}`,
+        distance: `${r.distance_km} km`,
+      };
+    });
+}
+
+export default async function PopularRoutes() {
+  const routes = await fetchRoutes();
+
   return (
     <section aria-labelledby="popular-routes-heading" className="py-12 md:py-16 bg-muted">
       <div className="max-w-7xl mx-auto px-4">
@@ -28,7 +66,7 @@ export default function PopularRoutes() {
 
         {/* Horizontal scroll on mobile, 4-col grid on desktop */}
         <div className="flex gap-4 overflow-x-auto pb-2 md:grid md:grid-cols-4 md:overflow-visible scrollbar-hide">
-          {ROUTES.map(({ from, to, price, distance }) => {
+          {routes.map(({ from, to, price, distance }) => {
             const href = `/cabs/${toSlug(from)}-to-${toSlug(to)}`;
             return (
               <a

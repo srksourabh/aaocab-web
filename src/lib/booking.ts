@@ -104,8 +104,8 @@ export async function createBooking(bookingData: BookingData) {
       advance_percent: bookingData.advance_percent,
       advance_amount: bookingData.advance_amount,
       balance_amount: bookingData.balance_amount,
-      advance_payment_status: "paid",
-      status: "confirmed",
+      advance_payment_status: "pending",
+      status: "pending",
       special_requests: bookingData.special_requests ?? null,
     })
     .select()
@@ -210,6 +210,30 @@ export function statusLabel(status: string): string {
     cancelled: "Cancelled",
   };
   return labels[status] ?? status;
+}
+
+/**
+ * Updates a booking's payment details after a successful Razorpay transaction.
+ * paymentId: the Razorpay payment_id from the checkout callback
+ * status: 'paid' once verified, 'pending' if failed
+ */
+export async function updateBookingPayment(
+  bookingId: string,
+  paymentId: string,
+  status: "paid" | "pending"
+) {
+  const { error } = await supabase
+    .from("bookings")
+    .update({
+      advance_payment_id: paymentId,
+      advance_payment_status: status,
+      status: status === "paid" ? "confirmed" : "pending",
+    })
+    .eq("id", bookingId);
+
+  if (error) {
+    throw new Error(`Failed to update booking payment: ${error.message}`);
+  }
 }
 
 /**

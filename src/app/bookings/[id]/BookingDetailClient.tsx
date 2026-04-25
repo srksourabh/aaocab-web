@@ -14,6 +14,7 @@ import { cancelBooking, statusLabel, statusColor } from "@/lib/booking";
 import StatusTimeline from "@/components/StatusTimeline";
 import DriverCard, { type DriverInfo, type VehicleInfo } from "@/components/DriverCard";
 import { tripTrackingMessage } from "@/lib/whatsapp";
+import { useBookingStatus } from "@/hooks/useBookingStatus";
 
 interface Booking {
   id: string;
@@ -128,10 +129,23 @@ export default function BookingDetailClient({ booking, driver, vehicle }: Props)
   const [showCancel, setShowCancel] = useState(false);
   const [cancelLoading, setCancelLoading] = useState(false);
   const [cancelError, setCancelError] = useState<string | null>(null);
-  const [currentStatus, setCurrentStatus] = useState(booking.status);
+
+  // Real-time status updates via Supabase Realtime
+  const {
+    status: currentStatus,
+    assignedDriver,
+    assignedVehicle,
+  } = useBookingStatus(booking.id, booking.status);
+
+  // Prefer real-time driver data if available, fall back to server-rendered props
+  const activeDriver = assignedDriver ?? driver ?? null;
+  const activeVehicle = assignedVehicle ?? vehicle ?? null;
+
+  const [cancelledStatus, setCancelledStatus] = useState<string | null>(null);
+  const displayStatus = cancelledStatus ?? currentStatus;
 
   const isCancellable =
-    currentStatus !== "cancelled" && currentStatus !== "completed";
+    displayStatus !== "cancelled" && displayStatus !== "completed";
   const bookingNum =
     booking.booking_number ?? booking.id.slice(0, 8).toUpperCase();
   const fromCity = booking.pickup_location?.city ?? "Pickup";
@@ -142,7 +156,7 @@ export default function BookingDetailClient({ booking, driver, vehicle }: Props)
     setCancelError(null);
     try {
       await cancelBooking(booking.id, "Customer requested cancellation");
-      setCurrentStatus("cancelled");
+      setCancelledStatus("cancelled");
       setShowCancel(false);
     } catch (err) {
       const msg =
@@ -163,8 +177,8 @@ export default function BookingDetailClient({ booking, driver, vehicle }: Props)
     );
   }
 
-  const showDriverSection = currentStatus !== "cancelled";
-  const hasDriver = driver && vehicle;
+  const showDriverSection = displayStatus !== "cancelled";
+  const hasDriver = activeDriver && activeVehicle;
 
   return (
     <div className="min-h-screen bg-background">
@@ -191,9 +205,9 @@ export default function BookingDetailClient({ booking, driver, vehicle }: Props)
             </h1>
           </div>
           <span
-            className={`text-xs font-semibold px-3 py-1 rounded-full ${statusColor(currentStatus)}`}
+            className={`text-xs font-semibold px-3 py-1 rounded-full ${statusColor(displayStatus)}`}
           >
-            {statusLabel(currentStatus)}
+            {statusLabel(displayStatus)}
           </span>
         </div>
 
@@ -270,23 +284,23 @@ export default function BookingDetailClient({ booking, driver, vehicle }: Props)
         </div>
 
         {/* Status timeline */}
-        {currentStatus !== "cancelled" && (
+        {displayStatus !== "cancelled" && (
           <div className="bg-card border border-border rounded-2xl p-4 space-y-4">
             <p className="font-heading font-semibold text-foreground">
               Trip Progress
             </p>
-            <StatusTimeline status={currentStatus} />
+            <StatusTimeline status={displayStatus} />
           </div>
         )}
 
-        {/* Driver section */}
+        {/* Driver section — updates in real-time when driver is assigned */}
         {showDriverSection && (
           hasDriver ? (
             <div className="space-y-2">
               <p className="font-heading font-semibold text-foreground px-0.5">
                 Your Driver
               </p>
-              <DriverCard driver={driver} vehicle={vehicle} />
+              <DriverCard driver={activeDriver!} vehicle={activeVehicle!} />
             </div>
           ) : (
             <div className="bg-muted border border-border rounded-2xl p-4 flex items-center gap-3">

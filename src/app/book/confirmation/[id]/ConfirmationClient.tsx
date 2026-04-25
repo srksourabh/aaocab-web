@@ -11,8 +11,13 @@ import {
   Home,
   ListOrdered,
   Loader2,
+  CheckCircle2,
+  Clock,
+  Car,
 } from "lucide-react";
 import { bookingConfirmationMessage } from "@/lib/whatsapp";
+import { useBookingStatus } from "@/hooks/useBookingStatus";
+import DriverCard from "@/components/DriverCard";
 
 interface Booking {
   id: string;
@@ -24,6 +29,7 @@ interface Booking {
   advance_amount: number;
   balance_amount: number;
   status: string;
+  passenger_name?: string;
 }
 
 interface Props {
@@ -50,14 +56,98 @@ function fmt(n: number) {
   return n.toLocaleString("en-IN");
 }
 
+// Progress steps for the human-touch journey indicator
+const PROGRESS_STEPS = [
+  { label: "Booking confirmed", icon: CheckCircle2 },
+  { label: "Assigning driver", icon: Clock },
+  { label: "Ready for pickup", icon: Car },
+] as const;
+
+function ProgressIndicator({ status }: { status: string }) {
+  const stepIndex =
+    status === "driver_assigned" ||
+    status === "en_route" ||
+    status === "in_progress" ||
+    status === "completed"
+      ? 2
+      : status === "confirmed"
+      ? 1
+      : 0;
+
+  return (
+    <div
+      className="flex items-center gap-0"
+      role="progressbar"
+      aria-label="Booking progress"
+      aria-valuenow={stepIndex + 1}
+      aria-valuemin={1}
+      aria-valuemax={3}
+    >
+      {PROGRESS_STEPS.map((step, idx) => {
+        const StepIcon = step.icon;
+        const isDone = idx <= stepIndex;
+        const isCurrent = idx === stepIndex;
+
+        return (
+          <div key={step.label} className="flex items-center">
+            <div className="flex flex-col items-center gap-1">
+              <div
+                className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors duration-500 ${
+                  isDone
+                    ? "bg-primary text-white"
+                    : "bg-muted text-muted-foreground"
+                }`}
+                aria-hidden="true"
+              >
+                {isCurrent && !isDone ? (
+                  <Loader2 size={16} className="animate-spin" />
+                ) : (
+                  <StepIcon size={16} />
+                )}
+              </div>
+              <span
+                className={`text-xs text-center w-20 leading-tight ${
+                  isDone ? "text-foreground font-medium" : "text-muted-foreground"
+                }`}
+              >
+                {step.label}
+              </span>
+            </div>
+            {idx < PROGRESS_STEPS.length - 1 && (
+              <div
+                className={`h-0.5 w-8 mb-5 transition-colors duration-500 ${
+                  idx < stepIndex ? "bg-primary" : "bg-border"
+                }`}
+                aria-hidden="true"
+              />
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function ConfirmationClient({ booking }: Props) {
   const [copied, setCopied] = useState(false);
+
+  const { status, assignedDriver, assignedVehicle } = useBookingStatus(
+    booking.id,
+    booking.status
+  );
 
   const bookingNum =
     booking.booking_number ?? booking.id.slice(0, 8).toUpperCase();
   const fromCity = booking.pickup_location?.city ?? "Pickup";
   const toCity = booking.drop_location?.city ?? "Drop";
   const pickupAddr = booking.pickup_location?.address ?? "";
+  const passengerName = booking.passenger_name ?? "";
+
+  const driverAssigned =
+    status === "driver_assigned" ||
+    status === "en_route" ||
+    status === "in_progress" ||
+    status === "completed";
 
   async function copyBookingNumber() {
     try {
@@ -88,12 +178,19 @@ export default function ConfirmationClient({ booking }: Props) {
           </div>
           <div>
             <h1 className="font-heading font-bold text-2xl text-foreground">
-              Your trip is confirmed!
+              {passengerName
+                ? `Hi ${passengerName}, your trip is confirmed!`
+                : "Your trip is confirmed!"}
             </h1>
             <p className="text-muted-foreground text-sm mt-1">
-              We&apos;re finding the best driver for your trip.
+              We typically assign a driver within 30 minutes.
             </p>
           </div>
+        </div>
+
+        {/* Progress indicator */}
+        <div className="flex justify-center py-2">
+          <ProgressIndicator status={status} />
         </div>
 
         {/* Booking number */}
@@ -161,21 +258,43 @@ export default function ConfirmationClient({ booking }: Props) {
           </div>
         </div>
 
-        {/* Driver status */}
-        <div className="flex items-center gap-3 p-4 bg-blue-50 border border-blue-200 rounded-2xl">
-          <Loader2
-            size={20}
-            className="text-blue-500 animate-spin shrink-0"
-            aria-hidden="true"
-          />
-          <div>
-            <p className="text-sm font-semibold text-blue-800">
-              Finding your driver...
-            </p>
-            <p className="text-xs text-blue-600 mt-0.5">
-              You&apos;ll receive a call once your driver is assigned.
-            </p>
-          </div>
+        {/* Driver status — live updating */}
+        <div
+          className={`transition-all duration-500 ${
+            driverAssigned
+              ? "opacity-100 translate-y-0"
+              : "opacity-100 translate-y-0"
+          }`}
+        >
+          {driverAssigned && assignedDriver && assignedVehicle ? (
+            <div
+              className="space-y-2 animate-fade-in"
+              role="region"
+              aria-label="Your driver"
+            >
+              <p className="font-heading font-semibold text-foreground">
+                Your Driver
+              </p>
+              <DriverCard driver={assignedDriver} vehicle={assignedVehicle} />
+            </div>
+          ) : (
+            <div className="flex items-center gap-3 p-4 bg-blue-50 border border-blue-200 rounded-2xl">
+              <Loader2
+                size={20}
+                className="text-blue-500 animate-spin shrink-0"
+                aria-hidden="true"
+              />
+              <div>
+                <p className="text-sm font-semibold text-blue-800">
+                  Finding your driver...
+                </p>
+                <p className="text-xs text-blue-600 mt-0.5">
+                  You&apos;ll receive a WhatsApp message once your driver is
+                  assigned.
+                </p>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Action buttons */}
@@ -236,7 +355,7 @@ export default function ConfirmationClient({ booking }: Props) {
         </div>
       </div>
 
-      {/* Checkmark animation style */}
+      {/* Checkmark animation and driver card fade-in styles */}
       <style>{`
         .checkmark-circle {
           width: 88px;
@@ -251,6 +370,13 @@ export default function ConfirmationClient({ booking }: Props) {
         @keyframes pop-in {
           0% { transform: scale(0); opacity: 0; }
           100% { transform: scale(1); opacity: 1; }
+        }
+        .animate-fade-in {
+          animation: fade-in 0.5s ease forwards;
+        }
+        @keyframes fade-in {
+          from { opacity: 0; transform: translateY(8px); }
+          to { opacity: 1; transform: translateY(0); }
         }
       `}</style>
     </div>

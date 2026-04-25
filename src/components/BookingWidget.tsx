@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { MapPin, ArrowRight, CalendarDays, Clock, ChevronDown } from "lucide-react";
 import FarePreview from "@/components/FarePreview";
+import PlacesAutocomplete, { type PlaceResult } from "@/components/PlacesAutocomplete";
 
 // --- Types ---
 type TripType = "outstation" | "local" | "airport";
@@ -15,6 +16,17 @@ interface OutstationState {
   date: string;
   time: string;
   roundTrip: boolean;
+  fromPlaceId?: string;
+  fromLat?: number;
+  fromLng?: number;
+  toPlaceId?: string;
+  toLat?: number;
+  toLng?: number;
+}
+
+interface RouteDistance {
+  distance_km: number;
+  duration_minutes: number;
 }
 
 interface LocalState {
@@ -221,20 +233,40 @@ function OutstationTab({
     onChange({ ...state, [key]: value });
   }
 
+  function handleFromChange(result: PlaceResult | null, rawText: string) {
+    onChange({
+      ...state,
+      from: rawText,
+      fromPlaceId: result?.place_id,
+      fromLat: result?.lat,
+      fromLng: result?.lng,
+    });
+  }
+
+  function handleToChange(result: PlaceResult | null, rawText: string) {
+    onChange({
+      ...state,
+      to: rawText,
+      toPlaceId: result?.place_id,
+      toLat: result?.lat,
+      toLng: result?.lng,
+    });
+  }
+
   return (
     <div className="space-y-3">
-      <TextInputField
+      <PlacesAutocomplete
         icon={MapPin}
         placeholder="Pickup city"
         value={state.from}
-        onChange={(v) => update("from", v)}
+        onChange={handleFromChange}
         label="From city"
       />
-      <TextInputField
+      <PlacesAutocomplete
         icon={MapPin}
         placeholder="Drop city"
         value={state.to}
-        onChange={(v) => update("to", v)}
+        onChange={handleToChange}
         label="To city"
       />
       <div className="grid grid-cols-2 gap-3">
@@ -453,6 +485,44 @@ export default function BookingWidget({
     time: "",
   });
 
+  // Real distance fetched from Google Distance Matrix API
+  const [routeDistance, setRouteDistance] = useState<RouteDistance | null>(null);
+  const distanceDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const fetchRouteDistance = useCallback(
+    (fromPlaceId: string, toPlaceId: string) => {
+      if (distanceDebounceRef.current) clearTimeout(distanceDebounceRef.current);
+      distanceDebounceRef.current = setTimeout(async () => {
+        try {
+          const qs = new URLSearchParams({
+            origin_place_id: fromPlaceId,
+            destination_place_id: toPlaceId,
+          });
+          const res = await fetch(`/api/distance?${qs.toString()}`);
+          if (!res.ok) {
+            setRouteDistance(null);
+            return;
+          }
+          const data = (await res.json()) as RouteDistance;
+          setRouteDistance(data);
+        } catch {
+          setRouteDistance(null);
+        }
+      }, 500);
+    },
+    []
+  );
+
+  // Trigger distance fetch whenever both place IDs are present
+  useEffect(() => {
+    const { fromPlaceId, toPlaceId } = outstationState;
+    if (fromPlaceId && toPlaceId) {
+      fetchRouteDistance(fromPlaceId, toPlaceId);
+    } else {
+      setRouteDistance(null);
+    }
+  }, [outstationState.fromPlaceId, outstationState.toPlaceId, fetchRouteDistance]);
+
   // Sync outstation form when NLP fills in new values
   useEffect(() => {
     if (!initialValues) return;
@@ -492,6 +562,9 @@ export default function BookingWidget({
 
   function handleGetPrices() {
     if (activeTab === "outstation") {
+      const distanceValue = routeDistance
+        ? String(Math.round(routeDistance.distance_km))
+        : "200";
       const qs = new URLSearchParams({
         from: outstationState.from,
         to: outstationState.to,
@@ -499,7 +572,7 @@ export default function BookingWidget({
         time: outstationState.time,
         type: "outstation",
         roundTrip: String(outstationState.roundTrip),
-        distance: "200", // default estimate; real routes will override
+        distance: distanceValue,
       });
       router.push(`/book?${qs.toString()}`);
     } else if (activeTab === "local") {
@@ -576,10 +649,29 @@ export default function BookingWidget({
         )}
       </div>
 
+      {/* Distance summary shown once Google calculates the real route */}
+      {activeTab === "outstation" && routeDistance && (
+        <p className="mt-3 text-sm text-muted-foreground text-center">
+          <span className="font-semibold text-foreground">
+            {routeDistance.distance_km} km
+          </span>
+          {" · ~"}
+          <span className="font-semibold text-foreground">
+            {routeDistance.duration_minutes >= 60
+              ? `${Math.floor(routeDistance.duration_minutes / 60)} hrs${routeDistance.duration_minutes % 60 > 0 ? ` ${routeDistance.duration_minutes % 60} min` : ""}`
+              : `${routeDistance.duration_minutes} min`}
+          </span>
+        </p>
+      )}
+
       {/* Fare preview — only for outstation tab when both cities are filled */}
       {activeTab === "outstation" && (
         <div className="mt-4">
-          <FarePreview from={outstationState.from} to={outstationState.to} />
+          <FarePreview
+            from={outstationState.from}
+            to={outstationState.to}
+            distanceKm={routeDistance?.distance_km}
+          />
         </div>
       )}
 

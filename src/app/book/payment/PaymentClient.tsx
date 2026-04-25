@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
@@ -8,7 +8,7 @@ import {
   CreditCard,
   Smartphone,
   Building2,
-  Info,
+  TestTube,
 } from "lucide-react";
 import { createBooking } from "@/lib/booking";
 
@@ -39,11 +39,39 @@ interface Props {
 type PaymentOption = "advance" | "full";
 type PaymentMethod = "upi" | "card" | "netbanking";
 
-const UPI_OPTIONS = [
-  { key: "phonepe", label: "PhonePe", color: "bg-purple-600" },
-  { key: "gpay", label: "GPay", color: "bg-blue-500" },
-  { key: "paytm", label: "Paytm", color: "bg-indigo-500" },
-] as const;
+// Razorpay checkout.js attaches a global constructor to `window`
+declare global {
+  interface Window {
+    Razorpay?: new (options: RazorpayOptions) => RazorpayInstance;
+  }
+}
+
+interface RazorpayOptions {
+  key: string;
+  amount: number;
+  currency: string;
+  order_id: string;
+  name: string;
+  description: string;
+  prefill: {
+    name: string;
+    contact: string;
+    email: string;
+  };
+  theme: { color: string };
+  handler: (response: RazorpaySuccessResponse) => void;
+  modal?: { ondismiss?: () => void };
+}
+
+interface RazorpaySuccessResponse {
+  razorpay_order_id: string;
+  razorpay_payment_id: string;
+  razorpay_signature: string;
+}
+
+interface RazorpayInstance {
+  open: () => void;
+}
 
 function fmt(n: number) {
   return n.toLocaleString("en-IN");
@@ -76,6 +104,20 @@ function FareRow({
   );
 }
 
+function loadRazorpayScript(): Promise<boolean> {
+  return new Promise((resolve) => {
+    if (window.Razorpay) {
+      resolve(true);
+      return;
+    }
+    const script = document.createElement("script");
+    script.src = "https://checkout.razorpay.com/v1/checkout.js";
+    script.onload = () => resolve(true);
+    script.onerror = () => resolve(false);
+    document.body.appendChild(script);
+  });
+}
+
 export default function PaymentClient({
   from,
   to,
@@ -102,9 +144,9 @@ export default function PaymentClient({
   const router = useRouter();
   const [paymentOption, setPaymentOption] = useState<PaymentOption>("advance");
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("upi");
-  const [selectedUpi, setSelectedUpi] = useState<string>("phonepe");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isMockMode, setIsMockMode] = useState(false);
 
   const total = parseInt(totalFare, 10) || 0;
   const advance = parseInt(advanceAmount, 10) || 0;
@@ -119,36 +161,37 @@ export default function PaymentClient({
       })
     : "";
 
+  // Preload the Razorpay checkout script on mount
+  useEffect(() => {
+    loadRazorpayScript().catch(() => undefined);
+  }, []);
+
+  function buildPickupDatetime(): string {
+    if (!date || !time) return date;
+    const [timePart, period] = time.split(" ");
+    const [hStr, mStr] = timePart.split(":");
+    let hours = parseInt(hStr, 10);
+    const minutes = parseInt(mStr, 10);
+    if (period === "PM" && hours !== 12) hours += 12;
+    if (period === "AM" && hours === 12) hours = 0;
+    const d = new Date(date);
+    d.setHours(hours, minutes, 0, 0);
+    return d.toISOString();
+  }
+
   async function handlePay() {
     setLoading(true);
     setError(null);
 
     try {
-      // Parse datetime: date is YYYY-MM-DD, time is "9:00 AM" format
-      let pickupDatetime = date;
-      if (date && time) {
-        const [timePart, period] = time.split(" ");
-        const [hStr, mStr] = timePart.split(":");
-        let hours = parseInt(hStr, 10);
-        const minutes = parseInt(mStr, 10);
-        if (period === "PM" && hours !== 12) hours += 12;
-        if (period === "AM" && hours === 12) hours = 0;
-        const d = new Date(date);
-        d.setHours(hours, minutes, 0, 0);
-        pickupDatetime = d.toISOString();
-      }
+      const pickupDatetime = buildPickupDatetime();
 
+      // 1. Create the booking in Supabase (status = 'pending')
       const booking = await createBooking({
         customer_id: null,
         trip_type: type,
-        pickup_location: {
-          address: pickupAddress,
-          city: from,
-        },
-        drop_location: {
-          address: "",
-          city: to,
-        },
+        pickup_location: { address: pickupAddress, city: from },
+        drop_location: { address: "", city: to },
         pickup_datetime: pickupDatetime,
         vehicle_category_id: vehicleCategoryId,
         route_id: null,
@@ -167,9 +210,112 @@ export default function PaymentClient({
         passenger_email: passengerEmail || null,
       });
 
-      router.push(`/book/confirmation/${booking.id}`);
+      // 2. Create a Razorpay order
+      const orderRes = await fetch("/api/payment/create-order", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          amount: payNow,
+          currency: "INR",
+          booking_id: booking.id,
+          customer_name: passengerName,
+          customer_phone: passengerPhone,
+          customer_email: passengerEmail || undefined,
+        }),
+      });
+
+      if (!orderRes.ok) {
+        const json = (await orderRes.json()) as { error?: string };
+        throw new Error(json.error ?? "Failed to initiate payment");
+      }
+
+      const orderData = (await orderRes.json()) as {
+        order_id: string;
+        amount: number;
+        currency: string;
+        key_id: string;
+        mock_mode: boolean;
+      };
+
+      if (orderData.mock_mode) {
+        setIsMockMode(true);
+        // Simulate a 2-second mock payment flow then redirect
+        await new Promise((r) => setTimeout(r, 2000));
+        await fetch("/api/payment/verify", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            razorpay_order_id: orderData.order_id,
+            razorpay_payment_id: `mock_pay_${Date.now()}`,
+            razorpay_signature: "mock_signature",
+            booking_id: booking.id,
+          }),
+        });
+        router.push(`/book/confirmation/${booking.id}`);
+        return;
+      }
+
+      // 3. Open Razorpay checkout modal
+      const scriptLoaded = await loadRazorpayScript();
+      if (!scriptLoaded || !window.Razorpay) {
+        throw new Error("Payment system could not be loaded. Please try again.");
+      }
+
+      const rzp = new window.Razorpay({
+        key: orderData.key_id,
+        amount: orderData.amount,
+        currency: orderData.currency,
+        order_id: orderData.order_id,
+        name: "AaoCab",
+        description: `${from} to ${to} — ${vehicleName}`,
+        prefill: {
+          name: passengerName,
+          contact: passengerPhone,
+          email: passengerEmail || "",
+        },
+        theme: { color: "#4F4ED6" },
+        handler: async (response: RazorpaySuccessResponse) => {
+          try {
+            // 4. Verify payment on our server
+            const verifyRes = await fetch("/api/payment/verify", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_signature: response.razorpay_signature,
+                booking_id: booking.id,
+              }),
+            });
+
+            if (!verifyRes.ok) {
+              const json = (await verifyRes.json()) as { error?: string };
+              throw new Error(json.error ?? "Payment verification failed");
+            }
+
+            // 5. Redirect to confirmation page
+            router.push(`/book/confirmation/${booking.id}`);
+          } catch (verifyErr) {
+            const msg =
+              verifyErr instanceof Error
+                ? verifyErr.message
+                : "Payment verification failed. Please contact support.";
+            setError(msg);
+            setLoading(false);
+          }
+        },
+        modal: {
+          ondismiss: () => {
+            setError("Payment was cancelled. Your booking has not been confirmed.");
+            setLoading(false);
+          },
+        },
+      });
+
+      rzp.open();
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Something went wrong. Please try again.";
+      const msg =
+        err instanceof Error ? err.message : "Something went wrong. Please try again.";
       setError(msg);
       setLoading(false);
     }
@@ -177,9 +323,22 @@ export default function PaymentClient({
 
   function handleBack() {
     const qs = new URLSearchParams({
-      from, to, date, time, type, roundTrip, distance,
-      vehicleCategoryId, vehicleSlug, vehicleName,
-      totalFare, baseFare, driverAllowance, toll, gst, advanceAmount,
+      from,
+      to,
+      date,
+      time,
+      type,
+      roundTrip,
+      distance,
+      vehicleCategoryId,
+      vehicleSlug,
+      vehicleName,
+      totalFare,
+      baseFare,
+      driverAllowance,
+      toll,
+      gst,
+      advanceAmount,
     });
     router.push(`/book/details?${qs.toString()}`);
   }
@@ -198,18 +357,26 @@ export default function PaymentClient({
           Back
         </button>
 
-        <h1 className="font-heading font-bold text-2xl text-foreground">
-          Payment
-        </h1>
+        <div className="flex items-center justify-between">
+          <h1 className="font-heading font-bold text-2xl text-foreground">
+            Payment
+          </h1>
+          {isMockMode && (
+            <span className="flex items-center gap-1.5 px-3 py-1 bg-amber-100 text-amber-800 text-xs font-semibold rounded-full border border-amber-300">
+              <TestTube size={12} aria-hidden="true" />
+              Test Mode
+            </span>
+          )}
+        </div>
 
         {/* Order Summary */}
         <div className="bg-card border border-border rounded-2xl p-4 space-y-1.5">
           <p className="font-heading font-semibold text-foreground">
-            {from} → {to}
+            {from} &rarr; {to}
           </p>
           <p className="text-sm text-muted-foreground">
             {formattedDate}
-            {time ? `, ${time}` : ""} · {vehicleName}
+            {time ? `, ${time}` : ""} &middot; {vehicleName}
           </p>
           <p className="text-sm text-muted-foreground">{passengerName}</p>
         </div>
@@ -252,12 +419,12 @@ export default function PaymentClient({
               [
                 {
                   key: "advance" as PaymentOption,
-                  label: `Pay 20% now — ₹${fmt(advance)}`,
-                  sub: `Balance ₹${fmt(balance)} to be paid to driver at pickup`,
+                  label: `Pay 20% now \u2014 \u20b9${fmt(advance)}`,
+                  sub: `Balance \u20b9${fmt(balance)} to be paid to driver at pickup`,
                 },
                 {
                   key: "full" as PaymentOption,
-                  label: `Pay full amount — ₹${fmt(total)}`,
+                  label: `Pay full amount \u2014 \u20b9${fmt(total)}`,
                   sub: "Nothing to pay at pickup",
                 },
               ] as const
@@ -294,7 +461,6 @@ export default function PaymentClient({
             Payment Method
           </p>
 
-          {/* Method selector tabs */}
           <div className="flex gap-2">
             {(
               [
@@ -320,47 +486,9 @@ export default function PaymentClient({
             ))}
           </div>
 
-          {/* UPI options */}
-          {paymentMethod === "upi" && (
-            <div className="flex gap-3">
-              {UPI_OPTIONS.map(({ key, label, color }) => (
-                <button
-                  key={key}
-                  type="button"
-                  onClick={() => setSelectedUpi(key)}
-                  className={`flex-1 flex flex-col items-center gap-1.5 py-3 rounded-xl border text-xs font-semibold transition-all duration-200 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
-                    selectedUpi === key
-                      ? "border-primary"
-                      : "border-border hover:border-primary/40"
-                  }`}
-                  aria-pressed={selectedUpi === key}
-                  aria-label={`Pay with ${label}`}
-                >
-                  <div
-                    className={`w-10 h-10 ${color} rounded-xl flex items-center justify-center text-white text-xs font-bold`}
-                    aria-hidden="true"
-                  >
-                    {label.charAt(0)}
-                  </div>
-                  {label}
-                </button>
-              ))}
-            </div>
-          )}
-
-          {paymentMethod === "card" && (
-            <div className="p-4 border border-border rounded-xl text-sm text-muted-foreground flex items-center gap-2">
-              <Info size={15} aria-hidden="true" />
-              Card payment integration coming soon. Please use UPI for now.
-            </div>
-          )}
-
-          {paymentMethod === "netbanking" && (
-            <div className="p-4 border border-border rounded-xl text-sm text-muted-foreground flex items-center gap-2">
-              <Info size={15} aria-hidden="true" />
-              Netbanking integration coming soon. Please use UPI for now.
-            </div>
-          )}
+          <p className="text-xs text-muted-foreground px-1">
+            Select UPI, Card, or Netbanking — all methods are available via the payment screen.
+          </p>
         </div>
 
         {/* Cancellation Policy */}
@@ -392,7 +520,11 @@ export default function PaymentClient({
           disabled={loading}
           className="w-full h-14 md:h-12 bg-primary text-white font-heading font-semibold text-base rounded-[40px] hover:bg-primary/90 active:scale-[0.98] transition-all duration-200 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-60 disabled:cursor-not-allowed"
         >
-          {loading ? "Booking..." : `Pay ₹${fmt(payNow)} & Book`}
+          {loading
+            ? isMockMode
+              ? "Simulating payment..."
+              : "Processing..."
+            : `Pay \u20b9${fmt(payNow)} & Book`}
         </button>
 
         <p className="text-xs text-center text-muted-foreground pb-4">

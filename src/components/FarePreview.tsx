@@ -7,6 +7,8 @@ import { estimateFareForVehicle } from "@/lib/seo";
 interface FarePreviewProps {
   from: string;
   to: string;
+  /** Real distance from Google Distance Matrix — used as fallback when DB route is not found */
+  distanceKm?: number;
 }
 
 interface FareEstimate {
@@ -25,7 +27,7 @@ function useDebouncedValue<T>(value: T, delayMs: number): T {
   return debounced;
 }
 
-export default function FarePreview({ from, to }: FarePreviewProps) {
+export default function FarePreview({ from, to, distanceKm: fallbackDistanceKm }: FarePreviewProps) {
   const debouncedFrom = useDebouncedValue(from, 500);
   const debouncedTo = useDebouncedValue(to, 500);
 
@@ -63,7 +65,15 @@ export default function FarePreview({ from, to }: FarePreviewProps) {
         if (currentFetchId !== fetchIdRef.current) return;
         if (!fromCity || !toCity) {
           setLoading(false);
-          setEstimate(null);
+          // Cities not in DB — use Google-calculated distance if provided
+          if (fallbackDistanceKm) {
+            setEstimate({
+              sedan: estimateFareForVehicle(fallbackDistanceKm, "sedan"),
+              innova: estimateFareForVehicle(fallbackDistanceKm, "innova"),
+            });
+          } else {
+            setEstimate(null);
+          }
           return;
         }
 
@@ -76,10 +86,12 @@ export default function FarePreview({ from, to }: FarePreviewProps) {
           .then(({ data: route }) => {
             if (currentFetchId !== fetchIdRef.current) return;
             setLoading(false);
-            if (route) {
+            // Use DB distance or fall back to Google-calculated distance
+            const km = route?.distance_km ?? fallbackDistanceKm;
+            if (km) {
               setEstimate({
-                sedan: estimateFareForVehicle(route.distance_km, "sedan"),
-                innova: estimateFareForVehicle(route.distance_km, "innova"),
+                sedan: estimateFareForVehicle(km, "sedan"),
+                innova: estimateFareForVehicle(km, "innova"),
               });
             } else {
               setEstimate(null);
@@ -91,7 +103,7 @@ export default function FarePreview({ from, to }: FarePreviewProps) {
         setLoading(false);
         setEstimate(null);
       });
-  }, [debouncedFrom, debouncedTo]);
+  }, [debouncedFrom, debouncedTo, fallbackDistanceKm]);
 
   // Don't render until both cities are typed
   if (!from.trim() || !to.trim()) return null;
