@@ -7,12 +7,13 @@ import {
   ArrowLeft,
   Phone,
   Share2,
-  CheckCircle2,
-  Circle,
   User,
   AlertTriangle,
 } from "lucide-react";
 import { cancelBooking, statusLabel, statusColor } from "@/lib/booking";
+import StatusTimeline from "@/components/StatusTimeline";
+import DriverCard, { type DriverInfo, type VehicleInfo } from "@/components/DriverCard";
+import { tripTrackingMessage } from "@/lib/whatsapp";
 
 interface Booking {
   id: string;
@@ -33,6 +34,8 @@ interface Booking {
 
 interface Props {
   booking: Booking;
+  driver?: DriverInfo | null;
+  vehicle?: VehicleInfo | null;
 }
 
 function fmt(n: number) {
@@ -53,71 +56,6 @@ function formatDatetime(isoStr: string): string {
   } catch {
     return isoStr;
   }
-}
-
-// --- Status Timeline ---
-const TIMELINE_STEPS = [
-  { key: "confirmed", label: "Booking Confirmed" },
-  { key: "driver_assigned", label: "Driver Assigned" },
-  { key: "in_route", label: "Driver En Route" },
-  { key: "in_progress", label: "Trip In Progress" },
-  { key: "completed", label: "Trip Completed" },
-] as const;
-
-const STATUS_ORDER: Record<string, number> = {
-  pending: 0,
-  confirmed: 1,
-  driver_assigned: 2,
-  in_route: 3,
-  in_progress: 4,
-  completed: 5,
-};
-
-function StatusTimeline({ status }: { status: string }) {
-  const currentOrder = STATUS_ORDER[status] ?? 1;
-
-  return (
-    <div className="space-y-0">
-      {TIMELINE_STEPS.map(({ key, label }, idx) => {
-        const stepOrder = idx + 1;
-        const isDone = currentOrder >= stepOrder;
-        const isLast = idx === TIMELINE_STEPS.length - 1;
-
-        return (
-          <div key={key} className="flex gap-3">
-            {/* Icon + connector */}
-            <div className="flex flex-col items-center">
-              {isDone ? (
-                <CheckCircle2
-                  size={20}
-                  className="text-[#24B7A4] shrink-0"
-                  aria-hidden="true"
-                />
-              ) : (
-                <Circle
-                  size={20}
-                  className="text-border shrink-0"
-                  aria-hidden="true"
-                />
-              )}
-              {!isLast && (
-                <div
-                  className={`w-0.5 flex-1 my-1 min-h-[20px] ${isDone && currentOrder > stepOrder ? "bg-[#24B7A4]" : "bg-border"}`}
-                  aria-hidden="true"
-                />
-              )}
-            </div>
-            {/* Label */}
-            <p
-              className={`text-sm pb-4 ${isDone ? "font-semibold text-foreground" : "text-muted-foreground"}`}
-            >
-              {label}
-            </p>
-          </div>
-        );
-      })}
-    </div>
-  );
 }
 
 // --- Cancel Confirmation Dialog ---
@@ -185,7 +123,7 @@ function CancelDialog({
 }
 
 // --- Main Component ---
-export default function BookingDetailClient({ booking }: Props) {
+export default function BookingDetailClient({ booking, driver, vehicle }: Props) {
   const router = useRouter();
   const [showCancel, setShowCancel] = useState(false);
   const [cancelLoading, setCancelLoading] = useState(false);
@@ -216,11 +154,17 @@ export default function BookingDetailClient({ booking }: Props) {
   }
 
   function shareOnWhatsApp() {
-    const text = encodeURIComponent(
-      `My AaoCab trip: ${fromCity} → ${toCity}\nBooking: ${bookingNum}\n${window.location.href}`
+    const message = tripTrackingMessage(booking.id, fromCity, toCity);
+    const encodedMessage = encodeURIComponent(message);
+    window.open(
+      `https://wa.me/?text=${encodedMessage}`,
+      "_blank",
+      "noopener,noreferrer"
     );
-    window.open(`https://wa.me/?text=${text}`, "_blank", "noopener,noreferrer");
   }
+
+  const showDriverSection = currentStatus !== "cancelled";
+  const hasDriver = driver && vehicle;
 
   return (
     <div className="min-h-screen bg-background">
@@ -335,24 +279,33 @@ export default function BookingDetailClient({ booking }: Props) {
           </div>
         )}
 
-        {/* Driver placeholder */}
-        {currentStatus !== "cancelled" && currentStatus !== "completed" && (
-          <div className="bg-muted border border-border rounded-2xl p-4 flex items-center gap-3">
-            <div
-              className="w-12 h-12 rounded-full bg-border flex items-center justify-center shrink-0"
-              aria-hidden="true"
-            >
-              <User size={22} className="text-muted-foreground" />
-            </div>
-            <div>
-              <p className="font-semibold text-sm text-foreground">
-                Driver not yet assigned
+        {/* Driver section */}
+        {showDriverSection && (
+          hasDriver ? (
+            <div className="space-y-2">
+              <p className="font-heading font-semibold text-foreground px-0.5">
+                Your Driver
               </p>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Driver will be assigned before your pickup time.
-              </p>
+              <DriverCard driver={driver} vehicle={vehicle} />
             </div>
-          </div>
+          ) : (
+            <div className="bg-muted border border-border rounded-2xl p-4 flex items-center gap-3">
+              <div
+                className="w-12 h-12 rounded-full bg-border flex items-center justify-center shrink-0"
+                aria-hidden="true"
+              >
+                <User size={22} className="text-muted-foreground" />
+              </div>
+              <div>
+                <p className="font-semibold text-sm text-foreground">
+                  Driver not yet assigned
+                </p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Driver will be assigned before your pickup time.
+                </p>
+              </div>
+            </div>
+          )
         )}
 
         {/* Cancel error */}

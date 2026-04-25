@@ -5,6 +5,9 @@ import { supabase } from "@/lib/supabase";
 import FAQSection from "@/components/FAQSection";
 import FareTable, { FareRow } from "@/components/FareTable";
 import { estimateFareForVehicle } from "@/lib/seo";
+import PriceComparison from "@/components/PriceComparison";
+import TripPlanner from "@/components/TripPlanner";
+import ReviewInsights from "@/components/ReviewInsights";
 
 const VEHICLE_DISPLAY: Array<{
   slug: string;
@@ -164,6 +167,11 @@ export default async function RoutePage({ slug }: { slug: string }) {
         </p>
       </section>
 
+      {/* Price comparison strip */}
+      <div className="mb-12">
+        <PriceComparison from={fromCity.name} to={toCity.name} />
+      </div>
+
       {/* Popular stops placeholder */}
       <section aria-labelledby="stops-heading" className="mb-12">
         <h2
@@ -205,6 +213,14 @@ export default async function RoutePage({ slug }: { slug: string }) {
         </ul>
       </section>
 
+      {/* AI Trip Planner */}
+      <TripPlanner
+        from={fromCity.name}
+        to={toCity.name}
+        distanceKm={route.distance_km}
+        durationMinutes={route.duration_minutes ?? 0}
+      />
+
       {/* Reviews */}
       <section aria-labelledby="reviews-heading" className="mb-12">
         <h2
@@ -213,6 +229,7 @@ export default async function RoutePage({ slug }: { slug: string }) {
         >
           Traveller Reviews
         </h2>
+        <ReviewInsights reviews={reviews ?? []} />
         {(reviews ?? []).length === 0 ? (
           <div className="rounded-xl border border-dashed border-border p-8 text-center text-muted-foreground text-sm">
             Be the first to review this route after your trip!

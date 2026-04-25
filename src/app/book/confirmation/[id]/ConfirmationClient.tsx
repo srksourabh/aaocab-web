@@ -12,6 +12,7 @@ import {
   ListOrdered,
   Loader2,
 } from "lucide-react";
+import { bookingConfirmationMessage } from "@/lib/whatsapp";
 
 interface Booking {
   id: string;
@@ -69,10 +70,12 @@ export default function ConfirmationClient({ booking }: Props) {
   }
 
   function shareOnWhatsApp() {
-    const text = encodeURIComponent(
-      `I've booked a cab with AaoCab!\n\nBooking: ${bookingNum}\nRoute: ${fromCity} → ${toCity}\nPickup: ${formatDatetime(booking.pickup_datetime)}\nTotal: ₹${fmt(booking.total_fare)}\n\nTracking: ${window.location.href}`
+    const message = bookingConfirmationMessage(booking);
+    window.open(
+      `https://wa.me/?text=${encodeURIComponent(message)}`,
+      "_blank",
+      "noopener,noreferrer"
     );
-    window.open(`https://wa.me/?text=${text}`, "_blank", "noopener,noreferrer");
   }
 
   return (

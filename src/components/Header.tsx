@@ -3,10 +3,12 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Phone } from "lucide-react";
+import LanguageToggle from "@/components/LanguageToggle";
+import { useLanguage } from "@/lib/i18n/context";
 
 export default function Header() {
   const [scrolled, setScrolled] = useState(false);
-  const [lang, setLang] = useState<"EN" | "HI">("EN");
+  const { t } = useLanguage();
 
   useEffect(() => {
     const handleScroll = () => {
@@ -16,10 +18,6 @@ export default function Header() {
     window.addEventListener("scroll", handleScroll, { passive: true });
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
-
-  function toggleLang() {
-    setLang((prev) => (prev === "EN" ? "HI" : "EN"));
-  }
 
   return (
     <header
@@ -39,19 +37,13 @@ export default function Header() {
 
         {/* Right side actions */}
         <div className="flex items-center gap-3">
-          {/* Language toggle */}
-          <button
-            onClick={toggleLang}
-            aria-label={`Switch to ${lang === "EN" ? "Hindi" : "English"}`}
-            className="text-sm font-semibold text-muted-foreground border border-border rounded-full px-3 py-1.5 min-h-[44px] min-w-[44px] flex items-center justify-center hover:bg-muted hover:text-foreground transition-all duration-200 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            {lang}
-          </button>
+          {/* Language toggle — now powered by i18n context */}
+          <LanguageToggle />
 
           {/* Phone CTA */}
           <a
             href="tel:7890302302"
-            aria-label="Call AaoCab at 7890302302"
+            aria-label={t("callSupport")}
             className="flex items-center gap-1.5 text-sm font-semibold text-primary min-h-[44px] px-3 rounded-full hover:bg-primary/10 transition-all duration-200 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <Phone size={18} aria-hidden="true" />

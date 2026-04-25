@@ -1,12 +1,40 @@
-import BookingWidget from "@/components/BookingWidget";
+"use client";
+
+import { useState } from "react";
+import BookingWidget, {
+  type BookingWidgetInitialValues,
+} from "@/components/BookingWidget";
+import NLPSearchBar from "@/components/NLPSearchBar";
+import { type ParsedTrip } from "@/lib/ai/nlp-search";
+
+function parsedTripToInitialValues(
+  result: ParsedTrip
+): BookingWidgetInitialValues {
+  return {
+    from: result.from ?? undefined,
+    to: result.to ?? undefined,
+    date: result.date ?? undefined,
+    time: result.time ?? undefined,
+    roundTrip: result.roundTrip,
+  };
+}
 
 export default function HeroSection() {
+  const [widgetValues, setWidgetValues] =
+    useState<BookingWidgetInitialValues | undefined>(undefined);
+
+  function handleParsed(result: ParsedTrip) {
+    // Create a new object reference each time so BookingWidget's useEffect fires
+    setWidgetValues(parsedTripToInitialValues(result));
+  }
+
   return (
     <section
       aria-label="Book a cab"
       className="min-h-[calc(100vh-64px)] md:min-h-0 md:py-16 flex items-start md:items-center"
       style={{
-        background: "linear-gradient(135deg, var(--primary-light) 0%, #ffffff 60%)",
+        background:
+          "linear-gradient(135deg, var(--primary-light) 0%, #ffffff 60%)",
       }}
     >
       <div className="max-w-7xl mx-auto px-4 w-full py-10 md:py-0">
@@ -19,16 +47,19 @@ export default function HeroSection() {
             <p className="text-lg text-muted-foreground font-sans leading-relaxed max-w-md">
               Pre-booked car rental.{" "}
               <span className="text-foreground font-semibold">No surge.</span>{" "}
-              <span className="text-foreground font-semibold">No surprises.</span>
+              <span className="text-foreground font-semibold">
+                No surprises.
+              </span>
             </p>
             <p className="text-sm text-muted-foreground">
               Available across 500+ cities in India
             </p>
           </div>
 
-          {/* Booking widget */}
+          {/* NLP Search + Booking widget */}
           <div className="w-full">
-            <BookingWidget />
+            <NLPSearchBar onParsed={handleParsed} />
+            <BookingWidget initialValues={widgetValues} />
           </div>
         </div>
       </div>

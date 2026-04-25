@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { MapPin, ArrowRight, CalendarDays, Clock, ChevronDown } from "lucide-react";
+import FarePreview from "@/components/FarePreview";
 
 // --- Types ---
 type TripType = "outstation" | "local" | "airport";
@@ -396,19 +397,48 @@ function AirportTab({
   );
 }
 
+// --- Initial values interface for NLP auto-fill ---
+export interface BookingWidgetInitialValues {
+  from?: string;
+  to?: string;
+  date?: string;
+  time?: string; // HH:mm 24-hour
+  roundTrip?: boolean;
+}
+
+/** Converts a 24-hour "HH:mm" string to the display format "H:MM AM/PM" used by TIME_SLOTS */
+function toDisplayTime(time: string): string {
+  const [h, m] = time.split(":").map(Number);
+  const period = h < 12 ? "AM" : "PM";
+  const displayH = h % 12 === 0 ? 12 : h % 12;
+  const displayM = m === 0 ? "00" : "30"; // snap to nearest 30-min slot
+  return `${displayH}:${displayM} ${period}`;
+}
+
+/** Finds the closest time slot available in TIME_SLOTS for a given 24-hour time. */
+function findClosestTimeSlot(time: string): string {
+  const display = toDisplayTime(time);
+  return TIME_SLOTS.includes(display) ? display : TIME_SLOTS[0];
+}
+
 // --- Main BookingWidget ---
-export default function BookingWidget() {
+export default function BookingWidget({
+  initialValues,
+}: {
+  initialValues?: BookingWidgetInitialValues;
+}) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<TripType>("outstation");
   const tabListRef = useRef<HTMLDivElement>(null);
 
   // State lifted up so CTA button can read it
   const [outstationState, setOutstationState] = useState<OutstationState>({
-    from: "",
-    to: "",
-    date: "",
-    time: "",
-    roundTrip: false,
+    from: initialValues?.from ?? "",
+    to: initialValues?.to ?? "",
+    date: initialValues?.date ?? "",
+    time:
+      initialValues?.time ? findClosestTimeSlot(initialValues.time) : "",
+    roundTrip: initialValues?.roundTrip ?? false,
   });
   const [localState, setLocalState] = useState<LocalState>({
     city: "",
@@ -422,6 +452,27 @@ export default function BookingWidget() {
     date: "",
     time: "",
   });
+
+  // Sync outstation form when NLP fills in new values
+  useEffect(() => {
+    if (!initialValues) return;
+    setOutstationState((prev) => ({
+      ...prev,
+      from: initialValues.from ?? prev.from,
+      to: initialValues.to ?? prev.to,
+      date: initialValues.date ?? prev.date,
+      time: initialValues.time
+        ? findClosestTimeSlot(initialValues.time)
+        : prev.time,
+      roundTrip: initialValues.roundTrip ?? prev.roundTrip,
+    }));
+    // Switch to outstation tab if NLP detected outstation fields
+    if (initialValues.from || initialValues.to) {
+      setActiveTab("outstation");
+    }
+  // Only fire when the initialValues reference changes (parent passes a new object)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialValues]);
 
   // Keyboard navigation for tabs
   function handleTabKeyDown(e: React.KeyboardEvent, currentIndex: number) {
@@ -525,11 +576,18 @@ export default function BookingWidget() {
         )}
       </div>
 
+      {/* Fare preview — only for outstation tab when both cities are filled */}
+      {activeTab === "outstation" && (
+        <div className="mt-4">
+          <FarePreview from={outstationState.from} to={outstationState.to} />
+        </div>
+      )}
+
       {/* CTA */}
       <button
         type="button"
         onClick={handleGetPrices}
-        className="mt-6 w-full flex items-center justify-center gap-2 bg-primary text-primary-foreground font-heading font-semibold text-base rounded-[40px] h-14 md:h-12 hover:bg-primary/90 active:scale-[0.98] transition-all duration-200 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+        className="mt-4 w-full flex items-center justify-center gap-2 bg-primary text-primary-foreground font-heading font-semibold text-base rounded-[40px] h-14 md:h-12 hover:bg-primary/90 active:scale-[0.98] transition-all duration-200 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
         aria-label="Get cab prices"
       >
         Get Prices

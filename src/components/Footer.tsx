@@ -1,20 +1,25 @@
+"use client";
+
 import { Phone, MessageCircle } from "lucide-react";
-
-const LINKS_COL_1 = [
-  { label: "About", href: "/about" },
-  { label: "Safety", href: "/safety" },
-  { label: "Blog", href: "/blog" },
-  { label: "Careers", href: "/careers" },
-];
-
-const LINKS_COL_2 = [
-  { label: "Terms", href: "/terms" },
-  { label: "Privacy", href: "/privacy" },
-  { label: "Refund Policy", href: "/refund-policy" },
-  { label: "Contact", href: "/contact" },
-];
+import { useLanguage } from "@/lib/i18n/context";
 
 export default function Footer() {
+  const { t } = useLanguage();
+
+  const linksCol1 = [
+    { key: "about" as const, href: "/about" },
+    { key: "safety" as const, href: "/safety" },
+    { key: "blog" as const, href: "/blog" },
+    { key: "careers" as const, href: "/careers" },
+  ];
+
+  const linksCol2 = [
+    { key: "terms" as const, href: "/terms" },
+    { key: "privacy" as const, href: "/privacy" },
+    { key: "refundPolicy" as const, href: "/refund-policy" },
+    { key: "contact" as const, href: "/contact" },
+  ];
+
   return (
     <footer
       className="text-slate-400 pt-12 pb-28 md:pb-12 px-4"
@@ -28,32 +33,30 @@ export default function Footer() {
             <span className="font-heading font-bold text-2xl text-white">
               AaoCab
             </span>
-            <p className="text-sm text-slate-500 max-w-xs">
-              Traveling Made Simple With Aao Cab
-            </p>
+            <p className="text-sm text-slate-500 max-w-xs">{t("tagline")}</p>
           </div>
 
           {/* Links grid */}
           <div className="grid grid-cols-2 gap-x-16 gap-y-3 text-sm">
             <div className="flex flex-col gap-3">
-              {LINKS_COL_1.map(({ label, href }) => (
+              {linksCol1.map(({ key, href }) => (
                 <a
-                  key={label}
+                  key={key}
                   href={href}
                   className="hover:text-white transition-colors duration-200 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
                 >
-                  {label}
+                  {t(key)}
                 </a>
               ))}
             </div>
             <div className="flex flex-col gap-3">
-              {LINKS_COL_2.map(({ label, href }) => (
+              {linksCol2.map(({ key, href }) => (
                 <a
-                  key={label}
+                  key={key}
                   href={href}
                   className="hover:text-white transition-colors duration-200 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
                 >
-                  {label}
+                  {t(key)}
                 </a>
               ))}
             </div>
@@ -67,7 +70,7 @@ export default function Footer() {
               className="flex items-center gap-2 text-sm font-medium text-white hover:text-primary transition-colors duration-200 cursor-pointer min-h-[44px] focus:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
             >
               <Phone size={18} aria-hidden="true" />
-              Call us: 7890 302 302
+              {t("callUs")}
             </a>
             <a
               href="https://wa.me/917890302302"
@@ -77,7 +80,7 @@ export default function Footer() {
               className="flex items-center gap-2 text-sm font-medium text-white hover:text-primary transition-colors duration-200 cursor-pointer min-h-[44px] focus:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
             >
               <MessageCircle size={18} aria-hidden="true" />
-              WhatsApp Us
+              {t("whatsappUs")}
             </a>
           </div>
         </div>
@@ -85,7 +88,7 @@ export default function Footer() {
         {/* Divider */}
         <div className="border-t border-slate-800 pt-6">
           <p className="text-xs text-slate-600 text-center md:text-left">
-            &copy; 2026 AaoCab Technologies Pvt. Ltd.
+            &copy; {t("copyright")}
           </p>
         </div>
       </div>

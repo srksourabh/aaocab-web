@@ -2,16 +2,18 @@
 
 import { Home, ClipboardList, MessageCircle, User } from "lucide-react";
 import { usePathname } from "next/navigation";
-
-const NAV_ITEMS = [
-  { label: "Home", icon: Home, href: "/" },
-  { label: "Bookings", icon: ClipboardList, href: "/bookings" },
-  { label: "Help", icon: MessageCircle, href: "/help" },
-  { label: "Profile", icon: User, href: "/profile" },
-] as const;
+import { useLanguage } from "@/lib/i18n/context";
 
 export default function BottomNav() {
   const pathname = usePathname();
+  const { t } = useLanguage();
+
+  const NAV_ITEMS = [
+    { labelKey: "navHome" as const, icon: Home, href: "/" },
+    { labelKey: "navBookings" as const, icon: ClipboardList, href: "/bookings" },
+    { labelKey: "navHelp" as const, icon: MessageCircle, href: "/help" },
+    { labelKey: "navProfile" as const, icon: User, href: "/profile" },
+  ];
 
   return (
     <nav
@@ -26,11 +28,12 @@ export default function BottomNav() {
           paddingBottom: "env(safe-area-inset-bottom)",
         }}
       >
-        {NAV_ITEMS.map(({ label, icon: Icon, href }) => {
+        {NAV_ITEMS.map(({ labelKey, icon: Icon, href }) => {
           const isActive = pathname === href;
+          const label = t(labelKey);
           return (
             <a
-              key={label}
+              key={href}
               href={href}
               aria-label={label}
               aria-current={isActive ? "page" : undefined}

@@ -12,6 +12,7 @@ import {
   Leaf,
 } from "lucide-react";
 import { generateFareEstimate } from "@/lib/booking";
+import PriceComparison from "@/components/PriceComparison";
 
 // --- Types ---
 interface VehicleCategory {
@@ -291,6 +292,11 @@ export default function CarSelectionClient({
           <BadgeCheck size={15} className="text-[#24B7A4]" aria-hidden="true" />
           <span>Estimated distance: {distanceKm} km</span>
         </div>
+
+        {/* Price comparison strip — shown for outstation bookings between two different cities */}
+        {type === "outstation" && from && to && from !== to && (
+          <PriceComparison from={from} to={to} />
+        )}
 
         {/* Vehicle cards */}
         {sorted.length === 0 ? (
