@@ -31,13 +31,25 @@ export default function HeroSection() {
   return (
     <section
       aria-label="Book a cab"
-      className="min-h-[calc(100vh-64px)] md:min-h-0 md:py-16 flex items-start md:items-center"
+      className="relative min-h-[calc(100vh-64px)] md:min-h-0 md:py-16 flex items-start md:items-center overflow-hidden"
       style={{
         background:
           "linear-gradient(135deg, var(--primary-light) 0%, #ffffff 60%)",
       }}
     >
-      <div className="max-w-7xl mx-auto px-4 w-full py-10 md:py-0">
+      {/* Background video — very low opacity for texture */}
+      <video
+        autoPlay
+        muted
+        loop
+        playsInline
+        aria-hidden="true"
+        className="absolute inset-0 w-full h-full object-cover opacity-[0.07] pointer-events-none"
+      >
+        <source src="/video/hero-bg.mp4" type="video/mp4" />
+      </video>
+
+      <div className="relative z-10 max-w-7xl mx-auto px-4 w-full py-10 md:py-0">
         <div className="grid md:grid-cols-2 gap-8 md:gap-12 items-center">
           {/* Headlines */}
           <div className="flex flex-col gap-4">
@@ -66,3 +78,4 @@ export default function HeroSection() {
     </section>
   );
 }
+

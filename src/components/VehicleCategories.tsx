@@ -1,4 +1,5 @@
-import { Car, Users } from "lucide-react";
+import Image from "next/image";
+import { Users } from "lucide-react";
 
 const VEHICLES = [
   {
@@ -6,35 +7,35 @@ const VEHICLES = [
     seats: 4,
     price: "₹2,000",
     description: "Swift Dzire, Etios — ideal for 4 passengers",
-    color: "from-blue-50 to-blue-100",
+    image: "/images/cab-sedan.jpg",
   },
   {
     name: "Ertiga",
     seats: 6,
     price: "₹2,800",
     description: "Comfortable MPV for families and groups",
-    color: "from-teal-50 to-teal-100",
+    image: "/images/cab-sedan.jpg",
   },
   {
     name: "Innova",
     seats: 7,
     price: "₹3,500",
     description: "Premium 7-seater for longer journeys",
-    color: "from-purple-50 to-purple-100",
+    image: "/images/cab-innova.jpg",
   },
   {
     name: "Innova Crysta",
     seats: 7,
     price: "₹4,000",
     description: "Upgraded comfort with extra legroom",
-    color: "from-amber-50 to-amber-100",
+    image: "/images/cab-fortuner.jpg",
   },
   {
     name: "12-Seater",
     seats: 12,
     price: "₹5,000",
     description: "Tempo traveller for large groups",
-    color: "from-green-50 to-green-100",
+    image: "/images/cab-fortuner.jpg",
   },
 ] as const;
 
@@ -51,17 +52,19 @@ export default function VehicleCategories() {
 
         {/* Horizontal scroll on mobile, 3-col grid on desktop */}
         <div className="flex gap-4 overflow-x-auto pb-2 md:grid md:grid-cols-3 md:overflow-visible scrollbar-hide">
-          {VEHICLES.map(({ name, seats, price, description, color }) => (
+          {VEHICLES.map(({ name, seats, price, description, image }) => (
             <div
               key={name}
               className="flex-shrink-0 w-64 md:w-auto bg-card rounded-xl border border-border overflow-hidden hover:shadow-md transition-shadow duration-200"
             >
-              {/* Vehicle image placeholder */}
-              <div
-                className={`h-36 bg-gradient-to-br ${color} flex items-center justify-center`}
-                aria-hidden="true"
-              >
-                <Car size={48} className="text-slate-400" />
+              <div className="relative h-36 w-full">
+                <Image
+                  src={image}
+                  alt={name}
+                  fill
+                  className="object-cover"
+                  sizes="(max-width: 768px) 256px, 33vw"
+                />
               </div>
 
               {/* Card body */}
